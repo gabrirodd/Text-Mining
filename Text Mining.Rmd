@@ -1,0 +1,553 @@
+---
+title: "Text Mining"
+author: "Gabriel Rodríguez Molina"
+date: "2023-04-16"
+output: html_document
+---
+
+
+# Introduction 
+
+Over the last 20 years the European Union's security and defence policy has undergone significant changes. This is caused by the development of different ideologies related to how we conceive security and the structures to facilitate policies that allow for a strategic presence in the international community and well-defined relations with other institutions. The shifts in EU security and defence positioning has been complex and controversial. Nevertheless, these changes have been necessary for the development of a robust security and defence policy that will ensure the safety and prosperity of the European Union in the future (Deighton, 2022). 
+
+These changes we have witnessed in EU institutions have been driven by various factors, including global security challenges, the changing role of NATO, and the need to strengthen the EU's capacity to respond to crises. One of the first significant changes in this context was the adoption of the European Security and Defense Policy (ESDP) in 1999, which aimed to establish a common EU foreign and security policy. This policy included the development of a Rapid Reaction Force, which was later transformed into the European Union Battlegroups in 2007, a group of up to 1,500 soldiers, ready to deploy within 10 days.
+
+In order to study this changes over time we have selected the three main documents published by the European Union in which it's provided a comprehensive assessment of the EU's security challenges and a strategy for addressing them. The first one we are analyzing is the "European Security Strategy" which is a document adopted by the European Union in December 2003; the second one is "A Global Strategy for the European Union's Foreign and Security Policy", which was adopted by the European Union in June 2016, updating the "European Security Strategy" from 2016. It was published in a very different international context in relation to the previous one, as the global landscape changed dramatically with the rise of new powers, challenges to the liberal rule-based order, technological changes, and new forms of terrorism. Also from a theoretical point of view in International Relations doctrines new approaches towards security were developed, in which it's recognized that security is not only about military defense but also about diplomacy, development, and other non-military aspects. Even aspects such as climate change starts to be recognized as a major security challenge, appearing as a new need for the EU to address and adapt to its impacts. 
+
+The third text is "A Strategic Compass for a stronger EU security and defence". It's a document that was adopted by the European Union in March 2022. The international context in this case has also seen very important shifts which are reflected in the text. The invasion of Russia to Ukraine, the defection of United States from Afghanistan and the rise of China make western countries shake due to the rise of new powers and the relative decline of their hegemonic position, creating a more multipolar and contested international environment. Also, nww and emerging security threats appear such as those related to cyber attacks, disinformation campaigns which are known as hybrid threats.
+
+I expect to observe these changes in the narratives of the different and guess its relation with the geopolitical changing environment which is affecting the nature of security threats. The 2003 document may focus more on traditional military threats, while the 2016 and 2022 documents may address newer and emerging security threats, such as the ones we mentioned before. In this context, as an hypothesis, I think I will find a more intergovernmental approach to defense and security in 2003 text, while the 2016 and 2022 documents may reflect more efforts to deepen defense cooperation among EU member states and to establish a European Defense Union. I think I will perceive changes in EU strategic priorities promoted in 2003 related to stability and security in its neighborhood, while the 2016 and 2022 documents may reflect a greater emphasis on crisis management, conflict prevention, and human security. I hope to find more mentions in the 2022 document of the need to defend the rules-based order, which is being threatened by various actors and forces in the international system, mentioning the necessity of defending international law, human rights and democracy, which has been increasingly challenged in recent years by various actors who seek to undermine it for their own interests. These actors may include authoritarian regimes, non-state actors, and extremist groups. The last idea I would like to mention is related to a concept that was repeatedly mentioned by Josep Borrell, the High Representative for Foreign Affairs and Security Policy in 2022. He has been referring to the concept of a "geopolitical Europe" which is related to the idea that the EU needs to be more assertive in its approach to foreign policy in order to defend its interests and values in the global system. This approach recognizes that the international system is increasingly shaped by geopolitical competition and that the EU needs to be more proactive in shaping the international agenda. I expect to find a greater emphasis on strategic autonomy and efforts to strengthen the defense industry, improve military capabilities, and deepen its defense cooperation among member states.
+
+# Importing and managing data
+
+Let's start then by loading all the libraries we are using for this project.
+
+```{r}
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(forcats)
+library(igraph)
+library(ggraph)
+library(tidyr)
+library(textstem)
+```
+
+Now we are reading each .csv file containing the documents mentioned and then create the column with the year of publication to work with them after mergin the df. We are also doing some data cleaning.
+
+```{r}
+eu2003 <- 
+  read_delim("EU_2003.csv", delim="\r", col_names = c("text")) %>% 
+  mutate(
+    year = "2003",
+# This first .csv is not read correctly, it contains many comas between one word and another; str_replace_all is used to replace all "," with empty spaces
+    text = str_replace_all(text, pattern = ",", replacement = " "),
+# We are removing irrelevant numbers to avoid having to filter them multiple times during the analysis. Also, the word "conflict" is not read properly, so we are eliminating both terms.
+    text = str_replace_all(text, pattern = "(09|13|05|30|56|90|confl|icts|ict)", replacement = "")
+       ) %>% 
+  select(-X2)
+
+eu2016 <- read_delim("EU_2016.csv", delim=",", col_names = c("text")) %>% 
+  mutate(
+    year = "2016"
+  ) %>%
+  mutate(
+    text = str_replace_all(text, pattern = ",", replacement = " ")
+  )
+
+eu2022 <- read_delim("EU_2022.csv", delim=",", col_names = c("text")) %>% 
+  mutate(
+    year = "2022"
+  )
+```
+
+The next step consists in merging the three data frames in one so we can start comparing the three texts.
+
+```{r}
+eu_docs <- rbind(eu2003, eu2016, eu2022)
+```
+
+# General overview
+
+To start our analysis it's necessary to tokenize our data frame by splitting the strings into words and then counting and arranging them. We are using "stop_words" to discard all unmeaningfull grammatical words.
+
+```{r}
+eu_token <-
+  eu_docs %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>% 
+  drop_na() %>% 
+  count(word, sort = TRUE) 
+
+eu_token
+```
+
+To gain a general understanding of the data we are dealing with, it is useful to plot the word frequencies. We are only showing words that appear more than 90 times in a descending order. These words are related to the European security and defence strategy and the international political context , including terms such as "global", "cooperation", "military", "threats" and "peace".
+
+```{r}
+eu_token %>%
+  filter(n > 90) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+#TF-IDF
+
+In order to assess our hypothesis, we are interested in analyzing the concepts and words used in each of the texts, and comparing them to observe any differences in the EU's policies and perspectives over time. Sentiment analysis could be a useful tool for predicting shifts in language in response to international tensions. By analyzing the sentiment of language used in various contexts, it may be possible to detect changes in the tone of conversations as international tensions increase or decrease.
+
+We will start by combining term frequency (TF) with inverse document frequency (IDF), so we are able to measure the importance of a concept within a certain text while also taking into account how distinctive it is in relation to other documents. TF-IDF analysis helps us determine how distinct a given document is from a collection of other documents, as a word can be highly indicative of a text through its high TF, yet not be considered distinctive when looking at the collection as a whole (IDF). By combining TF and IDF, we are able to balance their importance and gain insight into how unique a document is in comparison to other documents.
+
+We begin by applying a similar procedure, but this time incorporating lemmatization. Lemmatization is the process of reducing a word to its base or root form while still preserving its meaning. Standardizing words by reducing them to their base form can help to reduce the complexity of the text corpus and improve accuracy in analysis. There is no need to use stop_words as grammatical words are repeated often in all texts and thus have little value in the DF-IDF analysis.
+
+```{r}
+eu_words<-
+  eu_docs %>%
+  unnest_tokens(word, text) 
+
+eu_words$word <- lemmatize_words(eu_words$word)
+
+eu_words <-
+  eu_words %>% 
+  group_by(year) %>% 
+  count(word, sort = TRUE) %>% 
+  drop_na()
+```
+
+To calculate TF we add the number of words in each document to the existing data frame. Then, we divide the total term frequency by the number of words in the document to get the relative weight of each term in the document.
+
+```{r}
+total_words <- 
+  eu_words %>% 
+  summarize(total = sum(n))
+
+eu_words <- left_join(eu_words, total_words)
+
+eu_words <- 
+  eu_words %>%
+  mutate(term_frequency = n/total)
+
+eu_words
+```
+
+However, the bind_tf_idf function makes it easier to execute TF-IDF by providing an output of three columns containing the calculated values for TF, IDF, and TF-IDF. In the output, many of the values for IDF and TF-IDF are equal to 0, which indicates that the words are repeated across all of the documents.
+
+```{r}
+eu_tf_idf <- 
+  eu_words %>%
+  bind_tf_idf(word, year, n)
+
+eu_tf_idf
+```
+
+Let's represent words with higher TF-IDF. Some of the results we can observe here are obvious: compass is a very distinctive word because it's the term selected in the title to express the direction of the roadmap of the EU for the next years and it's not a term that comes from International Relations or security and defence vocabulary. Other words, however, may have less obvious meaning, such as why the usage of the word "problem" has decreased in recent documents. It might has been replaced by some euphemisms like "challenges" or "tensions" in the other texts.
+
+In terms of International Relations analysis, the word "cyberattacks" is one of the most interesting words on the first page, as it is a major issue in the global context. Cyberattacks and spying activities conducted by Russia towards Europe have been a major point of contention in recent years, and it would be invaluable to see this word in context.
+
+```{r}
+eu_tf_idf %>% 
+  arrange(desc(tf_idf))
+```
+
+Before we can represent our data, it is necessary to filter out words that have not been properly read when transforming the PDF format to CSV as it happens with "co" "operation" and "fi" "nances". This failure is not repeated many times, so I don't think the analysis is going to be too biased due to this. We are also removing numbers and codes.
+
+```{r}
+eu_docs %>% 
+  filter(str_detect(text, " co "))  
+eu_docs %>% 
+  filter(str_detect(text, " fi ")) 
+
+eu_tf_idf <-
+  eu_tf_idf %>%
+  filter(!word %in% c("ess", "co", "ordination", "5630", "en_ess.indd", "fi", "eff", "ç", "confl"))
+```
+
+Let's start by explaining all sort of interesting ideas we can extract from the graph below:
+
+  - 2003 document:
+  
+ESDP: It refers to the European Security and Defence Policy (ESDP), which is the European Union's course of action for defence and crisis management, whose name was changed in 2009 by the Treaty of Lisbon.
+
+WMD: It means Weapons of Mass Destruction, which were a major concern for the European Union in 2003 due to several factors, including the post-9/11 security environment and the proliferation of nuclear, biological, and chemical weapons. 
+
+Kosovo: It was a significant concern for the European Union security and defence in 2003 due to the ongoing conflict between Kosovo Albanian separatists and the Serbian government. At the time, the EU recognized that the conflict in Kosovo posed a significant threat to regional stability and security, as well as a humanitarian crisis. As a result, the EU implemented several initiatives in 2003 to address the conflict, including support for peace negotiations and the deployment of a military force, EUFOR Concordia, to help stabilize the region. While the situation in Kosovo remains a concern for EU security and defense, the importance of this issue as a priority has decreased somewhat over time, as the organization has adapted to changing security challenges and priorities.
+
+Javier Solana: He was a significant figure in European Union serving as the High Representative for Common Foreign and Security Policy until 2009. He figures out in this text because he was entitled with that charge at the moment but he's more known because of his controversial actions as General Secretary of NATO, facing a strong criticism for his role in the organization's response to the conflict in the Balkans in the 1990s, particularly with respect to the Srebrenica massacre in 1995 and bombing Belgrade in 1999.
+
+Piracy: In the late 2000s and early 2010s, Somali pirates launched a series of attacks on commercial shipping vessels, stealing ships and kidnapping crew members for payments. These incidents suposed a significant threat to global maritime security and raised concerns about the safety of shipping and the global economy. As a result, the EU and other international actors became increasingly involved in anti-piracy efforts in the region. The EU deployed a naval task force, known as Operation Atalanta (2008), to the Horn of Africa to provide security for commercial shipping vessels and to deter and disrupt pirate attacks. The operation has been successful in reducing the number of pirate attacks in the region.
+
+- 2016 document:
+
+Resilience: It has become increasingly important concept for EU security and defense in the last few years, we can observe that it's included in both 2016 and 2022 TF-IDF. The 2020 Strategic Foresight Report proposes resilience as a guide for EU policy-making:
+https://commission.europa.eu/strategy-and-policy/strategic-planning/strategic-foresight/2020-strategic-foresight-report_en 
+It is the capability to handle and manage difficulties, while at the same time making shifts in a sustainable, equitable, and democratic way. Resilience means improving the means of mitigating the impact of unexpected events and increasing the capability to adjust and evolve. This concept appeared because during the last decade more complex and multifaceted threats were faced by the region, such as natural disasters, pandemics, cyber threats and hybrid warfare. In this context, the ability to withstand and recover from unexpected shocks and disruptions is crucial.
+
+CSDP: stands for Common Security and Defense Policy, which is the successor of the ESDP.
+
+Asylum: This term is related to migration and refugee crisis. The EU has faced significant challenges related to migration and refugees in recent years, particularly since the outbreak of the Syrian conflict in 2011. The influx of refugees and migrants has raised concerns about security and defense, as it can create vulnerabilities and potential security risks. Asylum is an important issue for the EU's relations with its external partners. Working with countries of origin and transit to address the root causes of migration and improve asylum systems is important for promoting stability and security in the EU's neighborhood.
+
+- 2022 document: 
+
+Cyberattacks: Different international experiences have led cyberattacks to become very important for EU security and defense in recent years. The EU, like many other countries and organizations, have become increasingly reliant on technology for critical infrastructure and services. This includes financial systems, transportation networks, healthcare systems... As a result, the potential impact of cyberattacks on these systems has grown, and the importance of cybersecurity has increased. All kinds of cyber threats are becoming more sophisticated and difficult to detect and prevent. Russia has been accused of a number of high-profile cyberattacks in recent years, including the 2015 hack of the German parliament and the 2016 hack of the Democratic National Committee in the United States. These attacks have raised concerns about the country's use of cyber operations for political purposes and the potential threat to EU security. 
+
+Hybrid threats: They have become very important for EU security and defense, they blur the boundaries between conventional and unconventional warfare, making it difficult to respond using traditional military approaches. This requires a more integrated and holistic approach as it comes from variety of sources like states, terrorist organizations and criminal networks including actions like disinformation, cyberattacks, economic pressure, and subversion of political processes. Russian interference in elections is clear example of this, as the country has been accused of interfering in elections in several European countries, including France, Germany, and Italy. 
+
+Dependency: This term is related with the hybrid threats and strategic autonomy, a very repeated term during and after phenomena like COVID-19 or Russian war, two moments in which Europe witnessed its strong economic dependence due to the international fragmentation of production of goods and the way energy is supplied into the Union. Some EU countries are highly dependent on other countries for key resources and infrastructure that are critical for their national security, many of them depended too much on Russian natural gas for their energy needs. Dependencies create vulnerabilities in energy supplies, defense equipment, and critical technologies such as 5G and artificial intelligence. 
+
+```{r}
+eu_tf_idf %>% 
+  group_by(year) %>%
+  slice_max(tf_idf, n = 30) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, fct_reorder(word, tf_idf), fill = year)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~year, ncol = 3, scales = "free") +
+  labs(x = "tf-idf", y = NULL)
+```
+
+In this second part we have explored a variety of concepts that were more difficult to interpret or seemed to be useful to be better understood when analyzed in its context. We are not showing all words we tried in the code, but only those cases which have gained clarity during this process.
+
+  - 2003 document:
+
+Munition: As we can observe, in the first row it is related with the illicit accumulation and trafficking of SALW (Small Arms and Light Weapons) and their ammunition, which was a significant concern for the European Union in 2003. SALW are weapons that are designed for individual or small group use and include firearms, grenades, and other explosive devices. The illegal possession and transfer of SALW and their ammunition posed a threat to the safety and security of individuals and communities in the EU. To combat this issue, the European Union implemented several initiatives in 2003 to prevent and reduce the illicit trade of SALW and their ammunition. These initiatives include international efforts to address the issue of illicit SALW trafficking, including the adoption of the Arms Trade Treaty in 2014.
+
+WMD: In latest years progress has been made in international efforts to prevent the proliferation of Weapons of Mass Destruction, including the Iran nuclear deal in 2015. If we look at the word in its contexts we can discern a reference to this State. Both, the references to SALW and WMD show how concerned the EU was with non-state actors such as terrorists or rogue states and its catastrophic consequences both in terms of human lives and international security. When analyzing the context of words with a high TF-IDF score, such as "fail", we can see a frequent association with the concept of failed states. Failed states have been found to be advantageous for non-state actors to pursue their objectives.
+
+Globalisation: It is interesting to observe that such a popular word in IR texts like "globalisation" appears in the TF-IDF, as we would typically expect it to be very frequent in all texts. One possible explanation for this could be the fact that this concept was popularized in the 1990s, being more informative to discuss it at that moment and losing interest in 2016 or 2022. However, it could also be argued that as we have entered a period of questioning globalization, with restrictions on certain commercial ties and criticism of western hegemony and neoliberalism, the tendency to view globalization as an unstoppable uniform process is being contested too. This is a very recent phenomena, which has been accentuated with the protectionist policies developed by Trump, and the China-EU trade war. This might explains why it has zero mentions in the 2022 report.
+
+- 2016 document:
+
+Diplomacy: It's interesting to observe this terms related repeatedly to energetic diplomacy.  Energy diplomacy is an important tool for the European Union to ensure its energy security and reduce its dependence on any single supplier. By engaging in energy diplomacy, the EU can negotiate with energy suppliers to diversify its sources of energy and reduce the risk of supply disruptions. In recent years, this has become an increasingly important topic due to the rise of energy costs due to the Ukraine war, however it was already a key issue before the war. In addition to energy diplomacy, we can see also mentions to development diplomacy and preventive diplomacy related both to migration and peace-building respectively.
+
+Identity and diversity: It's worth noticing that this is the only document that speaks about these two terms. The EU is a diverse region with many different cultures, languages, and identities and ensuring social cohesion and preventing the marginalization of minority communities is essential for maintaining stability and security. This requires a focus on promoting diversity and inclusiveness in all institutional structures, including security and defense. In the last decade, this notions have become more popular, which has ended up extending the terms to areas which previously seemed far from security and defence issues. New concepts expressing less militarized vision towards security have entered to our institutions, as it happens with "human security", where discrimination based on identity is now seen as a source of political instability. 
+
+Basic: As it happens with "asylum" in 2016, there has been an increased awareness of the need for cooperation and development with regard to refugees or other vulnerable populations. This awareness has manifested itself in the provision of "basic" services and goods for humanitarian aid and the local population.
+
+Education: This term confirms the tendency in this year to give a more humanitarian face to security and defence issues, by expressing the necessity of ending up end children's illiteracy and taking a gender-inclusive approach towards women in this context too. It also promotes cooperation and civil society platforms, which move away from the traditional state-versus-state security approach, and encourages a decentralized, self-managed approach of the resources and the policies.
+
+- 2022 document:
+
+Interference: It has become a prevalent concept due to the emergence of new challenges posed by hybrid warfare, such as disinformation and manipulation campaigns in elections, cyber threats, foreign economic and energy interference, and activities by state and non-state actors.
+
+Geopolitical: In my opinion this term is absolutely meaningful, as it's crucial for understanding the changing ideological landscape of the European Union in the past two years. In 2016, the EU was largely focused on a humanitarian perspective, defending non-militarized conflict resolutionm aiming for global leadership and presenting itself as a normative hegemon. However, in recent years the European Union has experienced a shift towards a more military and traditional perspective in response to an increasingly tense international environment. This shift has been referred to as a "geopolitical awakening," meaning a return to the hard and traditional politics of State-versus-State approaches in international relations. This awakening is driven by events such as the geopolitical changes brought about by the Ukraine crisis, and the intensifying power rivalry between countries that has led to the erosion of multilateral solutions for solving  issues.
+
+Domain: Security threats in the modern era are becoming increasingly complex and multifaceted, apearing across multiple domains, such as cyberspace, air, land, sea, and space as we can see looking at the word in context. This  requires a comprehensive understanding of how these domains interact with one another. By recognizing these domains, the Eu can prepare to tackle the challenges posed by an evolving threat landscape.
+
+Exercise: The EU is increasingly aware of its strategic interests and priorities its ability to rapidly deploy military forces and equipment. This remilitarization of the EU is a new necessity to respond security threats in an efficient and quick manner. Other related concepts in this context that appear in the plot are readiness and adaptability, both of which emphasize the importance of being well-prepared and able to quickly adjust to changing circumstances.
+
+```{r}
+eu_docs %>% 
+  filter(str_detect(text, "munition")) 
+
+eu_docs %>% 
+  filter(str_detect(text, "WMD")) 
+
+eu_docs %>% 
+  filter(str_detect(text, "fail"))
+
+eu_docs %>% 
+  filter(str_detect(text, "failure"))
+
+eu_docs %>% 
+  filter(str_detect(text, "globalisation"))
+
+eu_docs %>% 
+  filter(str_detect(text, "diplomacy"))
+
+eu_docs %>% 
+  filter(str_detect(text, "identity|diversity"))
+
+eu_docs %>% 
+  filter(str_detect(text, "interference"))
+
+eu_docs %>% 
+  filter(str_detect(text, "domain"))
+
+eu_docs %>% 
+  filter(str_detect(text, "exercise"))
+
+```
+
+# N-grams
+
+We can use now n-grams to analyze consecutive sequences of words in context. To do this, we can use the function unnest tokens to create bigrams, which are n-grams made of two words. We then remove any NAs, separate the words into two different columns, and remove any grammatically meaningless words using the stop_words function. N-grams will be used for feature extraction, to help identify different patterns and structures within the text.
+
+```{r}
+eu_bigrams_filter<-
+  eu_docs %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) %>% 
+  filter(!is.na(bigram)) %>% 
+  separate(bigram, c("word1", "word2"), sep = " ") %>% 
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+```
+
+I decided to continue the same process to create trigrams, 4-grams, and 5-grams. For the last two n-grams, I chose not to filter using stop words, as there are almost no possible combinations of four or five words without using prepositions and determinants. By using 4-grams and 5-grams, we can discover larger expressions or combinations of words that may not be strict sequence of lexical words.
+
+```{r}
+eu_trigrams_filter<-
+  eu_docs %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 3) %>% 
+  filter(!is.na(bigram)) %>%
+  separate(bigram, c("word1", "word2", "word3"), sep = " ") %>% 
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  filter(!word3 %in% stop_words$word) 
+
+eu_tetragrams <-
+  eu_docs %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 4) %>% 
+  filter(!is.na(bigram)) %>%
+  separate(bigram, c("word1", "word2", "word3", "word4"), sep = " ")
+
+eu_pentagrams<-
+  eu_docs %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 5) %>% 
+  filter(!is.na(bigram)) %>% 
+  separate(bigram, c("word1", "word2", "word3", "word4", "word5"), sep = " ")
+```
+
+Looking at the bigrams might not be useful to compare reports but we can gain a general overview of the most repeated bigrams along all the three texts. Many of them are very obvious, at the same time it's impressive to see so many mentions to human rights and climate change in text related to security and defence. As it was signaled before this expresses a very recent reconceptualization of what does security consists of based on post-structuralist theories.
+
+In this context I think we could mention securitization theory, which is a post-structuralist International Relations theory that challenges the traditional approach to security studies. This theory critiques the assumption that security threats are objective and can be addressed through traditional state-centric means, instead arguing that security threats are socially constructed and their definition and resolution are shaped by power relations and discourses.
+
+Securitization theory has had a significant impact on the way security issues is conceived, and what we can see in this list of bigrams is a good example of it, as the theory has been widely used by policymakers to reconceptualize security dynamics in different contexts. Being conscious of the role of language and discourse in terms of how power is configured has led to a greater appreciation of the importance of non-traditional security threats such as climate change and human rights among many other things.
+
+According to Ole Waever and Barry Buzan, who developed the concept of securitization refers to the process by which an issue or topic is framed as a security threat, which allows for extraordinary measures to be taken to address it. In this context, conceiving climate change or human rights as main security threats, allow the use of exceptional measures to address them, generating the political will and resources needed to address these pressing global challenges.
+
+```{r}
+eu_bigrams_filter %>% 
+  count(word1, word2, sort = TRUE)
+```
+
+The first trigrams are related with the global projection of the European Union. On the one hand this is related with the steps of the EU to increase its military capabilities with an international scope. For example, the EU has established various military missions and operations in different parts of the world, including in the Balkans, Africa, and the Middle East. The EU has also established a number of military training programs and initiatives, and has worked to enhance cooperation among member states in the field of defense.
+
+However, EU global scope is reflected more clearly based on ideological principles as they defend a liberal international order based on universal principles such as global governance, human rights and democracy, which are opposed to the political realism point of view, which sees the international order as basically the struggle of each nation against all others, with little regard for international rights and values. The EU's efforts to promote a rules-based international order and to ensure that Western or universal values can transcend national borders reflect its commitment to a global scope.
+
+```{r}
+eu_trigrams_filter %>% 
+  count(word1, word2, word3, sort = TRUE)
+```
+
+In order to continue with our main goal related to extract conclusions comparing the three reports in relation to the term "global". The analysis of the the reports reveals that the EU was more interested in defending a rules-based model and other mechanisms of global governance in 2016 than in 2003 and 2022. In 2016, the term "global governance" was mentioned 11 times, while in 2003 and 2022 it was only mentioned 2 and 0 times respectively. This shows that the EU has become more conservative, focusing on its own internal protection, rather than defending universal values transnationally. The first page only contains one bigram related to "global security", indicating that the EU is now more concerned with ensuring its own safety in an increasingly hostile international order. This suggests that the EU is no longer as devoted to global challenges or responsibilities as it once was.
+
+```{r}
+eu_bigrams_filter %>% 
+  filter(word1 == "global") %>%
+  count(year, word1, word2, sort = TRUE)
+```
+
+In this case we observe just the opposite. There is only one row mentioning any kind of threat from the 2016 report in the first page, related to "terrorism hybrid threat". However, in relation to 2022 document, multiple rows feature different types of threats, showing that the European Union is taking a more defensive position. In the second page all mentions to possible threats are from the 2022 document.
+
+```{r}
+eu_trigrams_filter %>% 
+  filter(word3 == "threats") %>%
+  count(year, word1, word2, word3, sort = TRUE)
+eu_trigrams_filter
+```
+
+Let's combine now n-grams with TF-IDF. In this case the rhetoric is the same: the 2016 EU Global Strategy report highlights the importance of regional cooperation and a prosperous union, while the 2022 report shifted to a more defensive and militarized perspective. The two most distinctive words in the 2016 report were "union global" and "global strategy", which reflect the idea of the EU as a normative power with global hegemony. In contrast, the 2022 report places emphasis on "armed forces", "foreign information" and "military mobility", reflecting a localized view of external threats and a focus on international peace rather than cooperation, development and spreading values. This contrast between the two reports is highly informative, emphasizing the EU's shift away from a more ambitious global approach towards a more isolationist strategy.
+
+```{r}
+bigram_tf_idf <- eu_bigrams_filter %>%
+  unite(bigram, word1, word2, sep = " ") %>%
+  count(year, bigram) %>%
+  bind_tf_idf(bigram, year, n) %>%
+  arrange(desc(tf_idf))
+
+bigram_tf_idf
+
+bigram_tf_idf %>%
+  group_by(year) %>%
+  slice_max(tf_idf, n = 7) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, fct_reorder(bigram, tf_idf), fill = year)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~year, ncol = 2, scales = "free") +
+  labs(x = "tf-idf", y = NULL)
+```
+
+Let's do the same with trigrams now. In the 2016 reports, the terms "global" and "rules based global" were mentioned repeatedly, indicating the EU's focus on international cooperation. In the 2022 report, the first term identified by TF-IDF was "foreign information manipulation", and the second was "European Defence Fund", indicating the EU's commitment to strengthening its defence capabilities. However, the third term identified was "cooperation", which suggests that the EU was also focused on cooperative efforts to promote peace and stability in the region questioning my previous argumentary. However, when we look for the term "cooperation" in its context almost all mentions are related to militar cooperation with NATO to develop military messions and operations do defend itself from external threats.
+
+Also, it can be stated that in 2003, the European Union was heavily focused on crimes related to ethnic cleansing due to the ongoing conflict in the Balkans. This conflict, which included many different human rights violations, was the biggest security crisis in Europe since World War II, making it a priority for the EU to ensure peace and stability in the region. To achieve this, the EU deployed the Stabilization and Association Process (SAP) to promote peace and stability in the Balkans.
+
+```{r}
+trigram_tf_idf <- eu_trigrams_filter %>%
+  unite(trigram, word1, word2, word3, sep = " ") %>% 
+  count(year, trigram) %>%
+  bind_tf_idf(trigram, year, n) %>%
+  arrange(desc(tf_idf))
+trigram_tf_idf
+
+eu_docs %>% 
+  filter(str_detect(text, "cooperation")) %>% 
+  filter(year == "2022")
+```
+
+Same logic here. It is interesting to observe that when the EU speaks of values in 2022, it focuses on defending the interests and values of its citizens rather than projecting them externally. This rhetoric is more reminiscent of traditionally isolationist countries like China, who have tend to prioratize preserving their values than extending them out of bordera. Most 4-grams in the first two pages are from 2022, quite higher in number (n) related to 2003 4-grams in the second page. This indicates the repetition of certain phrases like a mantra, supporting ideas related to related the need of protecting the values and interests of European citizens and seeking international peace.
+
+```{r}
+tetragram_tf_idf <- eu_tetragrams %>%
+  unite(tetragram, word1, word2, word3, word4, sep = " ") %>%
+  count(year, tetragram) %>%
+  bind_tf_idf(tetragram, year, n) %>%
+  arrange(desc(tf_idf))
+
+tetragram_tf_idf
+
+tetragram_tf_idf %>%
+  group_by(year) %>%
+  slice_max(tf_idf, n = 6) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, fct_reorder(tetragram, tf_idf), fill = year)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~year, ncol = 2, scales = "free") +
+  labs(x = "tf-idf", y = NULL)
+```
+
+Aswell as it was observed before, the 2022 report appears to have a more homogeneous text in relation to those from 2003 and 2016, again showing a with a greater focus on defending Western values and order which are becoming increasingly questioned. This means that the varied, open and deep argumentation could have been lost in 2002 compared to previous reports, where they did not simply reiterated certain ideas but  included a critical review of many different aspects. 2016 report did not have a single phrase with a high TF-IDF that was repeated more than five times, whereas in the 2022 report, eight phrases were repeated 32 times.
+
+If we observe the plot below it can observed how heterogeneous are the different 5-gram concerning 2016, speaking about rules-based global order, mutual assistance, Syria and Libia, developing a global strategy...etc; while in 2023 everything is just focused on 2 ideas: protecting citizens values and contributing to international peace.
+
+```{r}
+pentagram_tf_idf <- eu_pentagrams %>%
+  unite(pentagram, word1, word2, word3, word4, word5, sep = " ") %>% 
+  count(year, pentagram) %>%
+  bind_tf_idf(pentagram, year, n) %>%
+  arrange(desc(tf_idf))
+
+pentagram_tf_idf
+
+pentagram_tf_idf %>%
+  group_by(year) %>%
+  slice_max(tf_idf, n = 6) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, fct_reorder(pentagram, tf_idf), fill = year)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~year, ncol = 2, scales = "free") +
+  labs(x = "tf-idf", y = NULL)
+```
+
+Let's make some different representations of our bigrams. Many of the ideas presented in this graph have already been discussed, such as those related to mass destruction weapons and nuclear weapons in Iran. It is interesting to note the inclusion of the Cold War,  which always appears to highlight contrasts between that time and the current one. This is likely related to the sense of changing world existing in 2003, when institutions began to realize that the international dynamics of the late 19th century had been replaced by a new post-Cold War order after the fall of the Soviet Union.
+
+```{r}
+bigram_count_03 <- eu_bigrams_filter %>% 
+  filter (year == 2003) %>% 
+  count(word1, word2, sort = TRUE)
+
+bigram_graph_03 <- bigram_count_03 %>%
+  filter(n > 3) %>%
+  graph_from_data_frame()
+
+set.seed(123)
+
+ggraph(bigram_graph_03, layout = "fr") +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 0)
+
+eu_docs %>% 
+  filter(str_detect(text, "Cold War")) 
+```
+
+# Sentiment analysis.
+
+To conclude the assignment I thought that performing sentiment analysis could be an interesting way to analyze the technical reports. Although, I am not sure whether the changes in attitudes that were identified previously will be detected using this technique, as these are very technical reports. To do so, the process of tokenizing would have to be repeated, as the line numbers need to be included in order to create the plot.
+
+```{r}
+tidy_eu_docs  <- eu_docs %>%
+  group_by(year) %>%
+  mutate(
+    linenumber = row_number()
+    ) %>%
+  ungroup() %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>% 
+  drop_na()
+```
+
+We are using three different methods learned during class to perform sentiment analysis and compare them. 
+
+- Afinn has as an output consisting of an integer quantity assigned to words between -5 to -5 and it's a regression algorithm that can predict a discrete value. 
+- Bing is a multiclass classification algorithm, which means that only one tag is possible for each single item giving as an output a label probability divided in positive and negative. 
+- Nrc is a multilabel classification approach made of 10 different sentiments or emotions, which means that different tags can be assigned to each word giving as an output label probabilities for the different tags.
+
+```{r}
+afinn <- get_sentiments("afinn")
+bing <- get_sentiments("bing")
+nrc <- get_sentiments("nrc")
+
+afinn %>%  distinct(value)
+bing %>%  distinct(sentiment)
+nrc %>%  distinct(sentiment)
+
+```
+
+The sentiment analysis of the three reports using the Bing approach reveals an interesting pattern. The 2016 report has no lines with a total negative output, which makes sense considering its content. On the other hand, the 2003 and 2022 reports have in principle a similar proportion of positive and negative lines, altough the 2003 report has more extreme negative values and the 2022 report has higher positive sentiment.
+
+```{r}
+eu_sentiment <-
+  tidy_eu_docs %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(year, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>%
+  mutate(sentiment = positive - negative)
+
+ggplot(eu_sentiment, aes(index, sentiment, fill = year)) +
+  geom_col(show.legend = TRUE) +
+  facet_wrap(~year, ncol = 3, scales = "free_x")
+```
+This plot doesn't seem  to be less informative. I shows similar patterns in relation to the previous ones, however, 2016 and 2022 follow a more similar pattern than it did before. Negative sentiment has decreased in the three reports.
+
+```{r}
+eu_sentiment_2 <- 
+  tidy_eu_docs %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  # In relation to the original code the only thing that was modified is grouping by year too, so that column is not droped.
+  group_by(year, index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN") 
+
+eu_sentiment_2 %>% 
+  ggplot(aes(index, sentiment, fill = year)) +
+  geom_col(show.legend = FALSE) +
+  #In this case we also added year, substituting it by "method"
+  facet_wrap(~year, ncol = 3, scales = "free_x")
+```
+
+In this case negative sentiments are even more hidden than before, but it's interesting to notice that the differences between 2016 and 2022 reports. We can clearly see how the positive rhetoric in the first one (2016) maintains very stable, having a quite positive output throughout the whole document, while the second one (2022) has more ups and downs.
+
+```{r}
+eu_sentiment_3 <-
+  tidy_eu_docs %>%
+  inner_join(get_sentiments("nrc") %>% 
+  filter(sentiment %in% c("positive", "negative"))
+    ) %>%
+  mutate(method = "NRC") %>%
+  count(year, method, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+eu_sentiment_3
+
+eu_sentiment_3 %>% 
+  ggplot(aes(index, sentiment, fill = year)) +
+  geom_col(show.legend = FALSE) +
+  #In this case we also added year, substituting it by "method"
+  facet_wrap(~year, ncol = 3, scales = "free_x")
+```
+
+# Conclusion 
+
+Through different text mining techniques, I was able to gain a deeper insight into the evolution of the ideological framework of the EU institutions studying the differences among texts. While some of my initial hypotheses were confirmed, others were proven wrong. Contrary to my initial belief, the EU has not taken a more radical stance in defense of a rules-based order and the values currently being challenged. Instead, paradoxically, the EU has taken on a more protectionist and militarized approach, which in principle colides with some of the principles they want to defend related to the prevalence of the international law, human rights and multilateralism for dealing with international conflicts. This has been a difficult decision for EU institutions to make, as it goes against the values they are attempting to uphold. However, for the EU this may be necessary in order to ensure that the liberal order and the values it stands for are not threatened by outside forces. 
+
+Unexpectedly, I also found very clear and distinct differences in the humanitarian approach of the EU institutions between 2016 and later years. Through the use of text mining techniques such as TF-IDF and n-grams, I was able to gain a deeper understanding of how the changes that had occurred. TF-IDF was especially useful in identifying distinctive terms, while n-grams allowed me to clearly understand these different approaches.
+
+On the other hand, my hypothesis regarding the awakening of a geopolitical Europe was confirmed. Thanks to applying different techniques it was possible for me to get a better understanding of this phenomena, the changes that have taken place and many different implications.
+
+
+# References
+
+Deighton A (2022): "The European Security and Defence Policy". Journal Common Market Studies, Volume 40, Issue 4.
